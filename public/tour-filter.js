@@ -95,22 +95,39 @@
     document.head.appendChild(style);
   }
 
-  function filterHomepageCards(slug) {
+  let cachedTours = null;
+
+  async function ensureTours() {
+    if (!cachedTours) cachedTours = await fetchTours();
+    return cachedTours;
+  }
+
+  function getTourIdFromCard(card) {
+    const testId = card.querySelector('[data-testid^="button-view-tour-"]')?.dataset?.testid || '';
+    const match = testId.match(/(\d+)/);
+    return match ? Number(match[1]) : null;
+  }
+
+  async function filterHomepageCards(slug) {
     const section = document.getElementById('tours');
     if (!section) return;
 
     const grid = section.querySelector('.grid');
     if (!grid) return;
 
+    const tours = await ensureTours();
     const cards = [...grid.children].filter((el) => el.querySelector('h3'));
     let visible = 0;
 
     cards.forEach((card) => {
-      const loc = card.textContent.toLowerCase();
-      const tourId = card.querySelector('[data-testid^="button-view-tour-"]')?.dataset?.testid?.match(/\d+/)?.[0];
+      const tourId = getTourIdFromCard(card);
+      const tour = tours.find((t) => t.id === tourId);
       let show = !slug;
 
-      if (slug && !show) {
+      if (slug && tour) {
+        show = tourMatchesCountry(tour, slug);
+      } else if (slug && !tour) {
+        const loc = card.textContent.toLowerCase();
         const keys = KEYWORDS[slug] || [slug];
         show = keys.some((k) => loc.includes(k));
       }
@@ -148,13 +165,13 @@
     const bar = document.createElement('div');
     bar.className = 'td-country-filter';
 
-    const render = (slug) => {
+    const render = async (slug) => {
       active = slug;
       setCountryInUrl(slug);
       bar.querySelectorAll('.td-country-chip').forEach((chip) => {
         chip.classList.toggle('td-country-chip--active', chip.dataset.country === (slug || 'all'));
       });
-      filterHomepageCards(slug);
+      await filterHomepageCards(slug);
     };
 
     bar.appendChild(makeChip('All Countries', null, !active, () => render(null)));
@@ -164,7 +181,7 @@
 
     header.appendChild(bar);
 
-    if (active) filterHomepageCards(active);
+    if (active) void filterHomepageCards(active);
 
     document.querySelectorAll('a[href^="/destinations/"]').forEach((link) => {
       link.addEventListener('click', (e) => {
