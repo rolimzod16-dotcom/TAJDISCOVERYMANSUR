@@ -72,7 +72,7 @@ function tourMatchesCountrySlug(tour, slug) {
     pakistan: ['pakistan', 'karakoram'],
     afghanistan: ['afghanistan'],
   };
-  const text = `${tour.location || ''} ${tour.name || ''} ${tour.description || ''}`.toLowerCase();
+  const text = `${tour.location || ''} ${tour.name || ''}`.toLowerCase();
   const keys = keywords[slug] || [slug];
   return keys.some((k) => text.includes(k));
 }
