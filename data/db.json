@@ -11,7 +11,11 @@
       "difficulty": "Moderate",
       "maxGroupSize": 10,
       "highlights": "Osh City|Tulparkul Lake|Lenin Peak Base Camp|Kizilart Pass|Aqbaital Pass|Bulunkul Lake|Wakhan Valley|Yamchun Fortress|Bibi Fatima Hot Springs|Khorog Botanical Garden|Panj River|Hulbuk Palace|Nurek Dam",
-      "createdAt": "2026-05-18T22:01:43.016Z"
+      "createdAt": "2026-05-18T22:01:43.016Z",
+      "countries": [
+        "tajikistan",
+        "kyrgyzstan"
+      ]
     },
     {
       "id": 12,
@@ -24,7 +28,10 @@
       "difficulty": "Moderate",
       "maxGroupSize": 10,
       "highlights": "Pamir Highway|Sarez Lake Trek|Yamchun Fortress|Langar Petroglyphs|Vrang Stupa|Garm Chashma Hot Springs|Karakul Lake|Yashilkul Lake|Bartang Valley|Pamiri Villages",
-      "createdAt": "2026-05-18T22:23:08.807Z"
+      "createdAt": "2026-05-18T22:23:08.807Z",
+      "countries": [
+        "tajikistan"
+      ]
     },
     {
       "id": 13,
@@ -37,7 +44,10 @@
       "difficulty": "Moderate",
       "maxGroupSize": 15,
       "highlights": "Dushanbe|Hissor Fortress|Seven Lakes|Fan Mountains|Iskanderkul Lake|Panjakent|Khujand|Hulbuk Fortress|Karon City|Rasht Valley",
-      "createdAt": "2026-05-18T22:42:44.377Z"
+      "createdAt": "2026-05-18T22:42:44.377Z",
+      "countries": [
+        "tajikistan"
+      ]
     },
     {
       "id": 14,
@@ -50,7 +60,11 @@
       "difficulty": "Moderate",
       "maxGroupSize": 10,
       "highlights": null,
-      "createdAt": "2026-05-21T11:57:04.671Z"
+      "createdAt": "2026-05-21T11:57:04.671Z",
+      "countries": [
+        "tajikistan",
+        "uzbekistan"
+      ]
     },
     {
       "id": 15,
@@ -63,7 +77,11 @@
       "difficulty": "Moderate",
       "maxGroupSize": 20,
       "highlights": null,
-      "createdAt": "2026-05-21T15:20:42.251Z"
+      "createdAt": "2026-05-21T15:20:42.251Z",
+      "countries": [
+        "tajikistan",
+        "afghanistan"
+      ]
     },
     {
       "id": 16,
@@ -76,7 +94,11 @@
       "difficulty": "Moderate",
       "maxGroupSize": 15,
       "highlights": null,
-      "createdAt": "2026-05-22T04:00:04.175Z"
+      "createdAt": "2026-05-22T04:00:04.175Z",
+      "countries": [
+        "tajikistan",
+        "uzbekistan"
+      ]
     },
     {
       "id": 17,
@@ -89,7 +111,10 @@
       "difficulty": "Moderate",
       "maxGroupSize": 10,
       "highlights": null,
-      "createdAt": "2026-05-23T04:26:32.058Z"
+      "createdAt": "2026-05-23T04:26:32.058Z",
+      "countries": [
+        "tajikistan"
+      ]
     },
     {
       "id": 18,
@@ -102,7 +127,11 @@
       "difficulty": "Moderate",
       "maxGroupSize": 10,
       "highlights": null,
-      "createdAt": "2026-05-23T07:51:56.539Z"
+      "createdAt": "2026-05-23T07:51:56.539Z",
+      "countries": [
+        "tajikistan",
+        "uzbekistan"
+      ]
     },
     {
       "id": 19,
@@ -115,7 +144,10 @@
       "difficulty": "Moderate",
       "maxGroupSize": 15,
       "highlights": null,
-      "createdAt": "2026-05-27T11:41:44.186Z"
+      "createdAt": "2026-05-27T11:41:44.186Z",
+      "countries": [
+        "tajikistan"
+      ]
     },
     {
       "id": 20,
@@ -128,7 +160,11 @@
       "difficulty": "Moderate",
       "maxGroupSize": 15,
       "highlights": null,
-      "createdAt": "2026-05-28T11:52:20.588Z"
+      "createdAt": "2026-05-28T11:52:20.588Z",
+      "countries": [
+        "tajikistan",
+        "uzbekistan"
+      ]
     }
   ],
   "settings": {

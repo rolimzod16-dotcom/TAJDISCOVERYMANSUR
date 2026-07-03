@@ -58,7 +58,31 @@ app.post('/api/storage/upload', upload.single('file'), (req, res) => {
   sendJson(res, { objectPath, url: objectPath });
 });
 
-app.get('/api/tours', (_req, res) => sendJson(res, readDb().tours));
+function tourMatchesCountrySlug(tour, slug) {
+  if (!slug) return true;
+  if (Array.isArray(tour.countries) && tour.countries.length) {
+    return tour.countries.includes(slug);
+  }
+  const keywords = {
+    tajikistan: ['tajikistan', 'dushanbe', 'pamir', 'wakhan', 'fann', 'panjakent', 'iskanderkul', 'bartang', 'hissor', 'sughd', 'khatlon', 'artuch', 'somoni', 'chilichorchama'],
+    uzbekistan: ['uzbekistan', 'samarqand', 'samarkand', 'bukhara', 'khiva', 'fergana', 'uzbek'],
+    kyrgyzstan: ['kyrgyzstan', 'osh', 'karakul', 'bishkek', 'lenin peak'],
+    kazakhstan: ['kazakhstan', 'almaty'],
+    china: ['china'],
+    pakistan: ['pakistan', 'karakoram'],
+    afghanistan: ['afghanistan'],
+  };
+  const text = `${tour.location || ''} ${tour.name || ''} ${tour.description || ''}`.toLowerCase();
+  const keys = keywords[slug] || [slug];
+  return keys.some((k) => text.includes(k));
+}
+
+app.get('/api/tours', (req, res) => {
+  const country = req.query.country;
+  let tours = readDb().tours;
+  if (country) tours = tours.filter((t) => tourMatchesCountrySlug(t, String(country).toLowerCase()));
+  sendJson(res, tours);
+});
 
 app.get('/api/tours/:id', (req, res) => {
   const tour = findById(readDb().tours, req.params.id);
