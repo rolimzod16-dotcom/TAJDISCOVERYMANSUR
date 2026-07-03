@@ -90,9 +90,33 @@ app.get('/api/tours/:id', (req, res) => {
   sendJson(res, tour);
 });
 
+function normalizeCountries(tour) {
+  if (Array.isArray(tour.countries) && tour.countries.length) return tour.countries;
+  const text = `${tour.location || ''} ${tour.name || ''}`.toLowerCase();
+  const rules = {
+    tajikistan: ['tajikistan', 'dushanbe', 'pamir', 'wakhan', 'fann', 'panjakent', 'iskanderkul', 'bartang', 'sughd', 'khatlon'],
+    uzbekistan: ['uzbekistan', 'samarqand', 'samarkand', 'uzbek'],
+    kyrgyzstan: ['kyrgyzstan', 'osh'],
+    kazakhstan: ['kazakhstan', 'almaty'],
+    china: ['china'],
+    pakistan: ['pakistan'],
+    afghanistan: ['afghanistan'],
+  };
+  const found = [];
+  for (const [slug, keys] of Object.entries(rules)) {
+    if (keys.some((k) => text.includes(k))) found.push(slug);
+  }
+  return found;
+}
+
 app.post('/api/tours', (req, res) => {
   const db = readDb();
-  const tour = { ...req.body, id: nextId(db, 'tour'), createdAt: new Date().toISOString() };
+  const tour = {
+    ...req.body,
+    id: nextId(db, 'tour'),
+    countries: normalizeCountries(req.body),
+    createdAt: new Date().toISOString(),
+  };
   db.tours.push(tour);
   writeDb(db);
   sendJson(res, tour, 201);
@@ -102,7 +126,12 @@ app.put('/api/tours/:id', (req, res) => {
   const db = readDb();
   const idx = db.tours.findIndex((t) => String(t.id) === String(req.params.id));
   if (idx === -1) return sendJson(res, { error: 'Tour not found' }, 404);
-  db.tours[idx] = { ...db.tours[idx], ...req.body, id: db.tours[idx].id };
+  db.tours[idx] = {
+    ...db.tours[idx],
+    ...req.body,
+    id: db.tours[idx].id,
+    countries: req.body.countries !== undefined ? normalizeCountries(req.body) : db.tours[idx].countries,
+  };
   writeDb(db);
   sendJson(res, db.tours[idx]);
 });

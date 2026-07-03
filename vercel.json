@@ -18,6 +18,7 @@
     { "src": "/robots.txt", "dest": "/public/robots.txt" },
     { "src": "/sitemap.xml", "dest": "/public/sitemap.xml" },
     { "src": "/tour-filter.js", "dest": "/public/tour-filter.js" },
+    { "src": "/admin-countries-patch.js", "dest": "/public/admin-countries-patch.js" },
     { "src": "/(.*)", "dest": "/public/index.html" }
   ]
 }
