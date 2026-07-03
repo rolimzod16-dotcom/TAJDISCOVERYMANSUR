@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: tajdiscovery
+    runtime: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ADMIN_PASSWORD
+        generateValue: true
+    disk:
+      name: tajdiscovery-data
+      mountPath: /app/data
+      sizeGB: 1
