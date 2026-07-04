@@ -232,7 +232,7 @@
           <div class="td-dest-tour-meta">${tour.location || ''} · ${tour.duration || ''}</div>
         </div>
         <div style="display:flex;align-items:center;gap:16px;">
-          <div class="td-dest-tour-price">$${Number(tour.price).toLocaleString()}</div>
+          <div class="td-dest-tour-price">${Number(tour.price) > 0 ? '$' + Number(tour.price).toLocaleString() : tr('Price upon request')}</div>
           <a class="td-dest-tour-link" href="/tours/${tour.id}">${tr('View Tour')}</a>
         </div>
       `;
