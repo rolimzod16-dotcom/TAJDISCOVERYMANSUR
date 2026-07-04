@@ -35,18 +35,21 @@
   }
 
   async function loadDict(lang) {
-    const enRes = await fetch('/locales/en.json');
-    const en = await enRes.json();
-    dict = {};
-    if (lang === 'en') {
-      for (const k of Object.keys(en)) dict[k] = k;
-      loaded = true;
-      return;
-    }
-    const locRes = await fetch(`/locales/${lang}.json`);
-    const loc = await locRes.json();
-    for (const [k, v] of Object.entries(en)) {
-      dict[k] = loc[k] || k;
+    try {
+      const enRes = await fetch('/locales/en.json');
+      const en = await enRes.json();
+      dict = {};
+      if (lang === 'en') {
+        for (const k of Object.keys(en)) dict[k] = k;
+      } else {
+        const locRes = await fetch(`/locales/${lang}.json`);
+        const loc = await locRes.json();
+        for (const [k] of Object.entries(en)) {
+          dict[k] = loc[k] || k;
+        }
+      }
+    } catch (_) {
+      dict = {};
     }
     loaded = true;
   }
@@ -106,13 +109,12 @@
     document.documentElement.lang = currentLang === 'tg' ? 'tg' : currentLang;
   }
 
-  function applyAll() {
-    if (!loaded || applying) return;
+  function applyTranslations() {
+    if (!loaded || applying || currentLang === 'en') return;
     applying = true;
     try {
-      if (currentLang !== 'en') translateNode(document.body);
+      translateNode(document.body);
       updateMeta();
-      injectSwitcher();
     } finally {
       applying = false;
     }
@@ -120,7 +122,10 @@
 
   function scheduleApply() {
     clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(applyAll, 80);
+    debounceTimer = setTimeout(() => {
+      ensureSwitcher();
+      applyTranslations();
+    }, 80);
   }
 
   function injectStyles() {
@@ -129,64 +134,78 @@
     style.id = 'td-i18n-styles';
     style.textContent = `
       #td-lang-switcher {
+        position: fixed;
+        top: 14px;
+        right: 14px;
+        z-index: 99999;
         display: inline-flex;
         align-items: center;
-        gap: 2px;
-        margin-left: 12px;
-        border: 1px solid hsl(38,20%,88%);
-        border-radius: 2px;
+        gap: 0;
+        border-radius: 4px;
         overflow: hidden;
-        flex-shrink: 0;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+        border: 1px solid rgba(212,168,83,0.45);
+        background: hsl(218,60%,8%);
+        font-family: Inter, system-ui, sans-serif;
       }
       #td-lang-switcher button {
-        font-size: 0.58rem;
-        letter-spacing: 0.14em;
+        font-size: 11px;
+        letter-spacing: 0.12em;
         font-weight: 700;
-        padding: 7px 10px;
+        padding: 9px 12px;
         border: none;
+        border-right: 1px solid rgba(255,255,255,0.1);
         background: transparent;
-        color: hsl(218,40%,40%);
+        color: rgba(255,255,255,0.75);
         cursor: pointer;
-        transition: all .2s ease;
+        transition: all .15s ease;
+        min-width: 36px;
       }
-      #td-lang-switcher button:hover { color: hsl(35,65%,40%); }
+      #td-lang-switcher button:last-child { border-right: none; }
+      #td-lang-switcher button:hover {
+        color: hsl(35,65%,55%);
+        background: rgba(255,255,255,0.06);
+      }
       #td-lang-switcher button.active {
-        background: hsl(218,60%,8%);
+        background: hsl(35,65%,45%);
         color: white;
       }
-      @media (max-width: 768px) {
-        #td-lang-switcher { margin-left: 8px; }
-        #td-lang-switcher button { padding: 6px 8px; }
+      @media (min-width: 768px) {
+        #td-lang-switcher {
+          top: 18px;
+          right: 180px;
+        }
+      }
+      @media (min-width: 1024px) {
+        #td-lang-switcher { right: 200px; }
       }
     `;
     document.head.appendChild(style);
   }
 
-  function injectSwitcher() {
+  function ensureSwitcher() {
+    if (window.location.pathname.startsWith('/admin')) return;
+
     injectStyles();
+
     let wrap = document.getElementById('td-lang-switcher');
     if (!wrap) {
-      const header = document.querySelector('header');
-      const nav = header?.querySelector('nav') || header?.querySelector('[class*="flex"]');
-      if (!nav) return;
-
       wrap = document.createElement('div');
       wrap.id = 'td-lang-switcher';
+      wrap.setAttribute('role', 'group');
+      wrap.setAttribute('aria-label', 'Language');
       wrap.addEventListener('click', (e) => {
         const btn = e.target.closest('[data-lang]');
         if (btn) setLang(btn.dataset.lang);
       });
-
-      const bookBtn = [...nav.querySelectorAll('a,button')].find((el) =>
-        /book journey|quick book|забронировать|сафар/i.test(el.textContent || '')
-      );
-      if (bookBtn?.parentElement) bookBtn.parentElement.insertBefore(wrap, bookBtn);
-      else nav.appendChild(wrap);
+      document.body.appendChild(wrap);
+    } else if (!document.body.contains(wrap)) {
+      document.body.appendChild(wrap);
     }
 
     wrap.innerHTML = SUPPORTED.map(
       (l) =>
-        `<button type="button" data-lang="${l}" class="${l === currentLang ? 'active' : ''}">${LABELS[l]}</button>`
+        `<button type="button" data-lang="${l}" class="${l === currentLang ? 'active' : ''}" aria-pressed="${l === currentLang}">${LABELS[l]}</button>`
     ).join('');
   }
 
@@ -223,14 +242,20 @@
     normalizeUrlPrefix();
     currentLang = getLang();
     localStorage.setItem(STORAGE_KEY, currentLang);
+
+    ensureSwitcher();
+
     await loadDict(currentLang);
-    applyAll();
+    updateMeta();
+    applyTranslations();
 
     const observer = new MutationObserver(scheduleApply);
-    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    setInterval(ensureSwitcher, 2000);
 
     window.addEventListener('popstate', scheduleApply);
-    window.TD_I18N = { getLang: () => currentLang, setLang, t, apply: applyAll };
+    window.TD_I18N = { getLang: () => currentLang, setLang, t, apply: applyTranslations };
   }
 
   if (document.readyState === 'loading') {
