@@ -3,21 +3,8 @@
   const STORAGE_KEY = 'td-lang';
   const LABELS = { en: 'EN', ru: 'RU', tg: 'TJ' };
 
-  let currentLang = 'en';
-  let dict = {};
-  let loaded = false;
-  let applying = false;
-  let debounceTimer = null;
-
-  function parseLangFromPath() {
-    const m = location.pathname.match(/^\/(en|ru|tg)(?=\/|$)/);
-    return m ? m[1] : null;
-  }
-
-  function getLang() {
-    const pathLang = parseLangFromPath();
-    if (pathLang) return pathLang;
-    const q = new URLSearchParams(location.search).get('lang');
+  function readLang() {
+    const q = new URLSearchParams(window.location.search).get('lang');
     if (q && SUPPORTED.includes(q)) return q;
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored && SUPPORTED.includes(stored)) return stored;
@@ -27,11 +14,34 @@
     return 'en';
   }
 
-  function normalizeUrlPrefix() {
-    const pathLang = parseLangFromPath();
-    if (!pathLang) return;
-    const newPath = location.pathname.replace(/^\/(en|ru|tg)/, '') || '/';
-    history.replaceState({}, '', newPath + location.search + location.hash);
+  let currentLang = readLang();
+  let dict = {};
+  let loaded = false;
+  let applying = false;
+  let debounceTimer = null;
+
+  const originalFetch = window.fetch.bind(window);
+  window.fetch = async function (url, options) {
+    let href = typeof url === 'string' ? url : url?.url || '';
+    if (href.startsWith('/') && href.includes('/api/') && !href.includes('/api/storage/')) {
+      const u = new URL(href, location.origin);
+      if (!u.searchParams.has('lang')) {
+        u.searchParams.set('lang', currentLang);
+        href = u.pathname + u.search;
+        if (typeof url === 'string') url = href;
+        else url = new Request(href, url);
+      }
+    }
+    return originalFetch(url, options);
+  };
+
+  function persistLang(lang) {
+    localStorage.setItem(STORAGE_KEY, lang);
+    const url = new URL(location.href);
+    if (lang === 'en') url.searchParams.delete('lang');
+    else url.searchParams.set('lang', lang);
+    url.searchParams.delete('_lc');
+    history.replaceState(null, '', url.pathname + url.search + url.hash);
   }
 
   async function loadDict(lang) {
@@ -44,9 +54,7 @@
       } else {
         const locRes = await fetch(`/locales/${lang}.json`);
         const loc = await locRes.json();
-        for (const [k] of Object.entries(en)) {
-          dict[k] = loc[k] || k;
-        }
+        for (const [k] of Object.entries(en)) dict[k] = loc[k] || k;
       }
     } catch (_) {
       dict = {};
@@ -56,8 +64,7 @@
 
   function t(text) {
     if (!text || currentLang === 'en') return text;
-    const trimmed = String(text).trim();
-    return dict[trimmed] ?? text;
+    return dict[String(text).trim()] ?? text;
   }
 
   function shouldSkip(el) {
@@ -97,15 +104,6 @@
       tg: 'TajDiscovery — Сафарҳои люкс ба Тоҷикистон ва экспедитсияҳои Роҳи Помир',
     };
     document.title = titles[currentLang] || titles.en;
-
-    const descs = {
-      en: 'Boutique Tajikistan travel agency crafting private expeditions along the Pamir Highway, Wakhan Corridor, Fann Mountains and Silk Road.',
-      ru: 'Бутик-агентство путешествий по Таджикистану: частные экспедиции по Памирскому тракту, коридору Вахан, горам Фанн и Великому шёлковому пути.',
-      tg: 'Агентии сафари бутикии Тоҷикистон: экспедитсияҳои хусусӣ дар Роҳи Помир, дарҳи Вахон, кӯҳҳои Фон ва Роҳи Абрешим.',
-    };
-    const desc = document.querySelector('meta[name="description"]');
-    if (desc && descs[currentLang]) desc.content = descs[currentLang];
-
     document.documentElement.lang = currentLang === 'tg' ? 'tg' : currentLang;
   }
 
@@ -120,33 +118,14 @@
     }
   }
 
-  function scheduleApply() {
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => {
-      ensureSwitcher();
-      applyTranslations();
-    }, 80);
-  }
-
-  function findNavSlot() {
-    const bookBtn =
-      document.querySelector('a.btn-luxury[href*="#book"]') ||
-      [...document.querySelectorAll('a[href*="#book"]')].find((a) => a.classList.contains('btn-luxury'));
-
-    if (bookBtn?.parentElement) {
-      return { parent: bookBtn.parentElement, before: bookBtn };
-    }
-
-    const menuBtn = document.querySelector('button[aria-label="Toggle menu"]');
-    if (menuBtn?.parentElement) {
-      return { parent: menuBtn.parentElement, before: menuBtn };
-    }
-
-    const nav = document.querySelector('nav');
-    const actions = nav?.querySelector('.flex.items-center.justify-end');
-    if (actions) return { parent: actions, before: null };
-
-    return null;
+  function setLang(lang) {
+    if (!SUPPORTED.includes(lang) || lang === currentLang) return;
+    localStorage.setItem(STORAGE_KEY, lang);
+    const url = new URL(location.href);
+    if (lang === 'en') url.searchParams.delete('lang');
+    else url.searchParams.set('lang', lang);
+    url.searchParams.set('_lc', String(Date.now()));
+    window.location.replace(url.toString());
   }
 
   function injectStyles() {
@@ -155,58 +134,100 @@
     style.id = 'td-i18n-styles';
     style.textContent = `
       #td-lang-switcher {
+        position: fixed;
+        z-index: 100000;
         display: inline-flex;
         align-items: center;
-        flex-shrink: 0;
-        border-radius: 3px;
+        gap: 0;
+        border-radius: 4px;
         overflow: hidden;
-        border: 1px solid rgba(255,255,255,0.22);
-        background: rgba(10,21,48,0.55);
+        border: 1px solid rgba(212,168,83,0.5);
+        background: hsl(218,60%,8%);
+        box-shadow: 0 4px 16px rgba(0,0,0,0.35);
         font-family: Inter, system-ui, sans-serif;
-        margin-right: 4px;
+        pointer-events: auto;
       }
       #td-lang-switcher button {
-        font-size: 10px;
-        letter-spacing: 0.1em;
+        font-size: 11px;
+        letter-spacing: 0.12em;
         font-weight: 700;
-        padding: 7px 9px;
+        padding: 8px 11px;
         border: none;
-        border-right: 1px solid rgba(255,255,255,0.12);
+        border-right: 1px solid rgba(255,255,255,0.15);
         background: transparent;
-        color: rgba(255,255,255,0.8);
+        color: rgba(255,255,255,0.85);
         cursor: pointer;
-        transition: all .15s ease;
         line-height: 1;
+        pointer-events: auto;
       }
       #td-lang-switcher button:last-child { border-right: none; }
-      #td-lang-switcher button:hover {
-        color: hsl(35,65%,60%);
-        background: rgba(255,255,255,0.08);
-      }
+      #td-lang-switcher button:hover { background: rgba(255,255,255,0.1); color: #fff; }
       #td-lang-switcher button.active {
         background: hsl(35,65%,45%);
         color: #fff;
       }
-      @media (min-width: 768px) {
-        #td-lang-switcher { margin-right: 10px; }
-        #td-lang-switcher button {
-          font-size: 10px;
-          padding: 8px 10px;
+      a.btn-luxury {
+        white-space: nowrap !important;
+        flex-shrink: 0 !important;
+        max-width: none !important;
+      }
+      nav .flex.items-center.justify-end {
+        flex-shrink: 0;
+        gap: 8px !important;
+      }
+      nav .max-w-7xl {
+        gap: 8px;
+      }
+      nav .hidden.lg\\:flex, nav [class*="lg:flex"] {
+        gap: 6px !important;
+      }
+      .writing-mode-vertical.rotate-90 {
+        transform-origin: center center;
+        margin-right: 8px;
+      }
+      @media (max-width: 1280px) {
+        .absolute.bottom-8.right-10.hidden.md\\:flex {
+          display: none !important;
         }
       }
-      nav .flex.items-center.justify-end { flex-wrap: nowrap; }
-      a.btn-luxury { white-space: nowrap; flex-shrink: 0; }
     `;
     document.head.appendChild(style);
   }
 
-  function ensureSwitcher() {
+  function positionSwitcher() {
+    const wrap = document.getElementById('td-lang-switcher');
+    if (!wrap) return;
+
+    const bookBtn =
+      document.querySelector('a.btn-luxury[href*="#book"]') ||
+      document.querySelector('a.btn-luxury');
+    const menuBtn = document.querySelector('button[aria-label="Toggle menu"]');
+
+    if (bookBtn && bookBtn.offsetParent !== null) {
+      const r = bookBtn.getBoundingClientRect();
+      wrap.style.top = `${Math.round(r.top + (r.height - wrap.offsetHeight) / 2)}px`;
+      wrap.style.left = `${Math.round(r.left - wrap.offsetWidth - 10)}px`;
+      wrap.style.right = 'auto';
+      return;
+    }
+
+    if (menuBtn) {
+      const r = menuBtn.getBoundingClientRect();
+      wrap.style.top = `${Math.round(r.top + (r.height - wrap.offsetHeight) / 2)}px`;
+      wrap.style.left = 'auto';
+      wrap.style.right = `${Math.round(window.innerWidth - r.left + 8)}px`;
+      return;
+    }
+
+    wrap.style.top = '18px';
+    wrap.style.right = '16px';
+    wrap.style.left = 'auto';
+  }
+
+  function renderSwitcher() {
     if (window.location.pathname.startsWith('/admin')) return;
 
     injectStyles();
-
-    const slot = findNavSlot();
-    if (!slot) return;
 
     let wrap = document.getElementById('td-lang-switcher');
     if (!wrap) {
@@ -214,56 +235,48 @@
       wrap.id = 'td-lang-switcher';
       wrap.setAttribute('role', 'group');
       wrap.setAttribute('aria-label', 'Language');
-      wrap.addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-lang]');
-        if (btn) setLang(btn.dataset.lang);
+      document.body.appendChild(wrap);
+    }
+
+    wrap.replaceChildren();
+    SUPPORTED.forEach((lang) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.dataset.lang = lang;
+      btn.textContent = LABELS[lang];
+      btn.className = lang === currentLang ? 'active' : '';
+      btn.setAttribute('aria-pressed', String(lang === currentLang));
+      btn.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
       });
-    }
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        setLang(lang);
+      });
+      wrap.appendChild(btn);
+    });
 
-    if (slot.before) slot.parent.insertBefore(wrap, slot.before);
-    else slot.parent.appendChild(wrap);
-
-    wrap.innerHTML = SUPPORTED.map(
-      (l) =>
-        `<button type="button" data-lang="${l}" class="${l === currentLang ? 'active' : ''}" aria-pressed="${l === currentLang}">${LABELS[l]}</button>`
-    ).join('');
+    requestAnimationFrame(positionSwitcher);
   }
 
-  function setLang(lang) {
-    if (!SUPPORTED.includes(lang) || lang === currentLang) return;
-    localStorage.setItem(STORAGE_KEY, lang);
-    const url = new URL(location.href);
-    if (lang === 'en') url.searchParams.delete('lang');
-    else url.searchParams.set('lang', lang);
-    location.href = url.pathname + url.search + url.hash;
+  function scheduleApply() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      renderSwitcher();
+      applyTranslations();
+    }, 100);
   }
-
-  const originalFetch = window.fetch.bind(window);
-  window.fetch = async function (url, options) {
-    let href = typeof url === 'string' ? url : url?.url || '';
-    if (
-      currentLang !== 'en' &&
-      href.startsWith('/') &&
-      href.includes('/api/') &&
-      !href.includes('/api/storage/')
-    ) {
-      const u = new URL(href, location.origin);
-      if (!u.searchParams.has('lang')) {
-        u.searchParams.set('lang', currentLang);
-        href = u.pathname + u.search;
-        if (typeof url === 'string') url = href;
-        else url = new Request(href, url);
-      }
-    }
-    return originalFetch(url, options);
-  };
 
   async function init() {
-    normalizeUrlPrefix();
-    currentLang = getLang();
-    localStorage.setItem(STORAGE_KEY, currentLang);
+    currentLang = readLang();
+    persistLang(currentLang);
 
-    ensureSwitcher();
+    renderSwitcher();
+    window.addEventListener('resize', positionSwitcher);
+    window.addEventListener('scroll', positionSwitcher, { passive: true });
 
     await loadDict(currentLang);
     updateMeta();
@@ -272,10 +285,17 @@
     const observer = new MutationObserver(scheduleApply);
     observer.observe(document.body, { childList: true, subtree: true });
 
-    setInterval(ensureSwitcher, 1500);
+    setInterval(() => {
+      renderSwitcher();
+      positionSwitcher();
+    }, 800);
 
-    window.addEventListener('popstate', scheduleApply);
-    window.TD_I18N = { getLang: () => currentLang, setLang, t, apply: applyTranslations };
+    window.TD_I18N = {
+      getLang: () => currentLang,
+      setLang,
+      t,
+      apply: applyTranslations,
+    };
   }
 
   if (document.readyState === 'loading') {
