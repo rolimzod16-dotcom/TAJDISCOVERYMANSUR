@@ -128,57 +128,74 @@
     }, 80);
   }
 
+  function findNavSlot() {
+    const bookBtn =
+      document.querySelector('a.btn-luxury[href*="#book"]') ||
+      [...document.querySelectorAll('a[href*="#book"]')].find((a) => a.classList.contains('btn-luxury'));
+
+    if (bookBtn?.parentElement) {
+      return { parent: bookBtn.parentElement, before: bookBtn };
+    }
+
+    const menuBtn = document.querySelector('button[aria-label="Toggle menu"]');
+    if (menuBtn?.parentElement) {
+      return { parent: menuBtn.parentElement, before: menuBtn };
+    }
+
+    const nav = document.querySelector('nav');
+    const actions = nav?.querySelector('.flex.items-center.justify-end');
+    if (actions) return { parent: actions, before: null };
+
+    return null;
+  }
+
   function injectStyles() {
     if (document.getElementById('td-i18n-styles')) return;
     const style = document.createElement('style');
     style.id = 'td-i18n-styles';
     style.textContent = `
       #td-lang-switcher {
-        position: fixed;
-        top: 14px;
-        right: 14px;
-        z-index: 99999;
         display: inline-flex;
         align-items: center;
-        gap: 0;
-        border-radius: 4px;
+        flex-shrink: 0;
+        border-radius: 3px;
         overflow: hidden;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.35);
-        border: 1px solid rgba(212,168,83,0.45);
-        background: hsl(218,60%,8%);
+        border: 1px solid rgba(255,255,255,0.22);
+        background: rgba(10,21,48,0.55);
         font-family: Inter, system-ui, sans-serif;
+        margin-right: 4px;
       }
       #td-lang-switcher button {
-        font-size: 11px;
-        letter-spacing: 0.12em;
+        font-size: 10px;
+        letter-spacing: 0.1em;
         font-weight: 700;
-        padding: 9px 12px;
+        padding: 7px 9px;
         border: none;
-        border-right: 1px solid rgba(255,255,255,0.1);
+        border-right: 1px solid rgba(255,255,255,0.12);
         background: transparent;
-        color: rgba(255,255,255,0.75);
+        color: rgba(255,255,255,0.8);
         cursor: pointer;
         transition: all .15s ease;
-        min-width: 36px;
+        line-height: 1;
       }
       #td-lang-switcher button:last-child { border-right: none; }
       #td-lang-switcher button:hover {
-        color: hsl(35,65%,55%);
-        background: rgba(255,255,255,0.06);
+        color: hsl(35,65%,60%);
+        background: rgba(255,255,255,0.08);
       }
       #td-lang-switcher button.active {
         background: hsl(35,65%,45%);
-        color: white;
+        color: #fff;
       }
       @media (min-width: 768px) {
-        #td-lang-switcher {
-          top: 18px;
-          right: 180px;
+        #td-lang-switcher { margin-right: 10px; }
+        #td-lang-switcher button {
+          font-size: 10px;
+          padding: 8px 10px;
         }
       }
-      @media (min-width: 1024px) {
-        #td-lang-switcher { right: 200px; }
-      }
+      nav .flex.items-center.justify-end { flex-wrap: nowrap; }
+      a.btn-luxury { white-space: nowrap; flex-shrink: 0; }
     `;
     document.head.appendChild(style);
   }
@@ -187,6 +204,9 @@
     if (window.location.pathname.startsWith('/admin')) return;
 
     injectStyles();
+
+    const slot = findNavSlot();
+    if (!slot) return;
 
     let wrap = document.getElementById('td-lang-switcher');
     if (!wrap) {
@@ -198,10 +218,10 @@
         const btn = e.target.closest('[data-lang]');
         if (btn) setLang(btn.dataset.lang);
       });
-      document.body.appendChild(wrap);
-    } else if (!document.body.contains(wrap)) {
-      document.body.appendChild(wrap);
     }
+
+    if (slot.before) slot.parent.insertBefore(wrap, slot.before);
+    else slot.parent.appendChild(wrap);
 
     wrap.innerHTML = SUPPORTED.map(
       (l) =>
@@ -252,7 +272,7 @@
     const observer = new MutationObserver(scheduleApply);
     observer.observe(document.body, { childList: true, subtree: true });
 
-    setInterval(ensureSwitcher, 2000);
+    setInterval(ensureSwitcher, 1500);
 
     window.addEventListener('popstate', scheduleApply);
     window.TD_I18N = { getLang: () => currentLang, setLang, t, apply: applyTranslations };
