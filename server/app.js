@@ -36,6 +36,40 @@ function filterByTour(list, tourId) {
   return list.filter((item) => String(item.tourId) === String(tourId));
 }
 
+const SUPPORTED_LANGS = ['en', 'ru', 'tg'];
+
+function getRequestLang(req) {
+  const lang = String(req.query.lang || '').toLowerCase();
+  return SUPPORTED_LANGS.includes(lang) ? lang : 'en';
+}
+
+function localizeEntity(entity, lang, fields) {
+  if (!lang || lang === 'en' || !entity) return entity;
+  const tr = entity.translations?.[lang];
+  if (!tr) return entity;
+  const out = { ...entity };
+  for (const f of fields) {
+    if (tr[f] != null && tr[f] !== '') out[f] = tr[f];
+  }
+  return out;
+}
+
+function localizeTour(tour, lang) {
+  return localizeEntity(tour, lang, ['name', 'description', 'location', 'duration', 'highlights', 'difficulty']);
+}
+
+function localizeSettings(settings, lang) {
+  if (!lang || lang === 'en') return settings;
+  const tr = settings.i18n?.[lang];
+  if (!tr) return settings;
+  const result = { ...settings };
+  if (tr.hero) result.hero = { ...result.hero, ...tr.hero };
+  if (tr.about) result.about = { ...result.about, ...tr.about };
+  if (tr.stats) result.stats = tr.stats;
+  if (tr.footer) result.footer = { ...result.footer, ...tr.footer };
+  return result;
+}
+
 function sortByOrder(list) {
   return [...list].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
 }
@@ -78,16 +112,18 @@ function tourMatchesCountrySlug(tour, slug) {
 }
 
 app.get('/api/tours', (req, res) => {
+  const lang = getRequestLang(req);
   const country = req.query.country;
   let tours = readDb().tours;
   if (country) tours = tours.filter((t) => tourMatchesCountrySlug(t, String(country).toLowerCase()));
-  sendJson(res, tours);
+  sendJson(res, tours.map((t) => localizeTour(t, lang)));
 });
 
 app.get('/api/tours/:id', (req, res) => {
+  const lang = getRequestLang(req);
   const tour = findById(readDb().tours, req.params.id);
   if (!tour) return sendJson(res, { error: 'Tour not found' }, 404);
-  sendJson(res, tour);
+  sendJson(res, localizeTour(tour, lang));
 });
 
 function normalizeCountries(tour) {
@@ -326,7 +362,10 @@ app.post('/api/inquiries', (req, res) => {
   sendJson(res, inquiry, 201);
 });
 
-app.get('/api/settings', (_req, res) => sendJson(res, readDb().settings));
+app.get('/api/settings', (req, res) => {
+  const lang = getRequestLang(req);
+  sendJson(res, localizeSettings(readDb().settings, lang));
+});
 app.put('/api/settings/:section', (req, res) => {
   const db = readDb();
   const section = req.params.section;

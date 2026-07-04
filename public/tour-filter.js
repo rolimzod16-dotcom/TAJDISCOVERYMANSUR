@@ -1,4 +1,8 @@
 (function () {
+  function tr(text) {
+    return window.TD_I18N?.t?.(text) ?? text;
+  }
+
   const DESTINATIONS = [
     { slug: 'tajikistan', country: 'Tajikistan' },
     { slug: 'uzbekistan', country: 'Uzbekistan' },
@@ -143,8 +147,9 @@
         empty.className = 'td-tours-empty';
         grid.appendChild(empty);
       }
-      const country = DESTINATIONS.find((d) => d.slug === slug)?.country || slug;
-      empty.textContent = `No expeditions found for ${country} yet. Contact us for a custom journey.`;
+      const country = tr(DESTINATIONS.find((d) => d.slug === slug)?.country || slug);
+      const msg = tr('No tours found for this destination.') || `No expeditions found for ${country} yet. Contact us for a custom journey.`;
+      empty.textContent = msg.includes(country) ? msg : `${msg} (${country})`;
       empty.style.display = '';
     } else if (empty) {
       empty.style.display = 'none';
@@ -174,9 +179,9 @@
       await filterHomepageCards(slug);
     };
 
-    bar.appendChild(makeChip('All Countries', null, !active, () => render(null)));
+    bar.appendChild(makeChip(tr('All'), null, !active, () => render(null)));
     DESTINATIONS.forEach((d) => {
-      bar.appendChild(makeChip(d.country, d.slug, active === d.slug, () => render(d.slug)));
+      bar.appendChild(makeChip(tr(d.country), d.slug, active === d.slug, () => render(d.slug)));
     });
 
     header.appendChild(bar);
@@ -228,7 +233,7 @@
         </div>
         <div style="display:flex;align-items:center;gap:16px;">
           <div class="td-dest-tour-price">$${Number(tour.price).toLocaleString()}</div>
-          <a class="td-dest-tour-link" href="/tours/${tour.id}">View Tour</a>
+          <a class="td-dest-tour-link" href="/tours/${tour.id}">${tr('View Tour')}</a>
         </div>
       `;
       wrap.appendChild(card);
@@ -264,6 +269,14 @@
   } else {
     init();
   }
+
+  window.addEventListener('td-lang-change', () => {
+    cachedTours = null;
+    document.querySelectorAll('.td-country-filter').forEach((el) => el.remove());
+    document.querySelectorAll('.td-dest-tours').forEach((el) => el.remove());
+    init();
+    if (window.TD_I18N?.apply) window.TD_I18N.apply();
+  });
 
   window.addEventListener('popstate', () => {
     const slug = getCountryFromUrl();
