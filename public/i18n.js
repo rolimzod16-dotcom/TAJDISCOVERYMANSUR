@@ -2,6 +2,7 @@
   const SUPPORTED = ['en', 'ru', 'tg'];
   const STORAGE_KEY = 'td-lang';
   const LABELS = { en: 'EN', ru: 'RU', tg: 'TJ' };
+  const FULL_NAMES = { en: 'English', ru: 'Русский', tg: 'Тоҷикӣ' };
 
   function readLang() {
     const q = new URLSearchParams(window.location.search).get('lang');
@@ -19,6 +20,7 @@
   let loaded = false;
   let applying = false;
   let debounceTimer = null;
+  let menuOpen = false;
 
   const originalFetch = window.fetch.bind(window);
   window.fetch = async function (url, options) {
@@ -128,138 +130,240 @@
     window.location.replace(url.toString());
   }
 
+  function findNavActions() {
+    const nav = document.querySelector('nav');
+    if (!nav) return null;
+    return (
+      nav.querySelector('.flex.items-center.justify-end.gap-3') ||
+      nav.querySelector('.flex.items-center.justify-end') ||
+      nav.querySelector('[class*="justify-end"]')
+    );
+  }
+
+  function closeMenu() {
+    menuOpen = false;
+    const menu = document.querySelector('.td-lang-menu');
+    const toggle = document.querySelector('.td-lang-toggle');
+    if (menu) menu.classList.remove('td-lang-menu--open');
+    if (toggle) toggle.setAttribute('aria-expanded', 'false');
+  }
+
   function injectStyles() {
     if (document.getElementById('td-i18n-styles')) return;
     const style = document.createElement('style');
     style.id = 'td-i18n-styles';
     style.textContent = `
-      #td-lang-switcher {
-        position: fixed;
-        z-index: 100000;
-        display: inline-flex;
-        align-items: center;
-        gap: 0;
-        border-radius: 4px;
+      /* ── Navbar layout fix ── */
+      nav .max-w-7xl[class*="grid"] {
+        grid-template-columns: minmax(0, auto) minmax(0, 1fr) minmax(0, auto) !important;
+        gap: 12px !important;
+        padding-left: 16px !important;
+        padding-right: 16px !important;
+      }
+      nav .hidden.md\\:flex.items-center[class*="gap"] {
+        justify-content: center;
+        flex-wrap: nowrap;
+        gap: 14px !important;
+        min-width: 0;
         overflow: hidden;
-        border: 1px solid rgba(212,168,83,0.5);
-        background: hsl(218,60%,8%);
-        box-shadow: 0 4px 16px rgba(0,0,0,0.35);
-        font-family: Inter, system-ui, sans-serif;
-        pointer-events: auto;
       }
-      #td-lang-switcher button {
-        font-size: 11px;
-        letter-spacing: 0.12em;
-        font-weight: 700;
-        padding: 8px 11px;
-        border: none;
-        border-right: 1px solid rgba(255,255,255,0.15);
-        background: transparent;
-        color: rgba(255,255,255,0.85);
-        cursor: pointer;
-        line-height: 1;
-        pointer-events: auto;
+      nav .hidden.md\\:flex.items-center a,
+      nav .hidden.md\\:flex.items-center button[type="button"] {
+        white-space: nowrap !important;
+        flex-shrink: 0;
+        font-size: 0.56rem !important;
+        letter-spacing: 0.14em !important;
       }
-      #td-lang-switcher button:last-child { border-right: none; }
-      #td-lang-switcher button:hover { background: rgba(255,255,255,0.1); color: #fff; }
-      #td-lang-switcher button.active {
-        background: hsl(35,65%,45%);
-        color: #fff;
+      html[lang="ru"] nav .hidden.md\\:flex.items-center a,
+      html[lang="ru"] nav .hidden.md\\:flex.items-center button[type="button"],
+      html[lang="tg"] nav .hidden.md\\:flex.items-center a,
+      html[lang="tg"] nav .hidden.md\\:flex.items-center button[type="button"] {
+        font-size: 0.52rem !important;
+        letter-spacing: 0.11em !important;
+      }
+      @media (min-width: 1100px) {
+        nav .hidden.md\\:flex.items-center[class*="gap"] { gap: 18px !important; }
+        nav .hidden.md\\:flex.items-center a,
+        nav .hidden.md\\:flex.items-center button[type="button"] {
+          font-size: 0.58rem !important;
+        }
+      }
+      @media (min-width: 1280px) {
+        nav .hidden.md\\:flex.items-center[class*="gap"] { gap: 24px !important; }
+        nav .hidden.md\\:flex.items-center a,
+        nav .hidden.md\\:flex.items-center button[type="button"] {
+          font-size: 0.6rem !important;
+        }
+      }
+      nav .flex.items-center.justify-end {
+        flex-shrink: 0;
+        gap: 10px !important;
+        margin-left: auto;
       }
       a.btn-luxury {
         white-space: nowrap !important;
         flex-shrink: 0 !important;
-        max-width: none !important;
+        padding-left: 16px !important;
+        padding-right: 16px !important;
+        font-size: 0.56rem !important;
       }
-      nav .flex.items-center.justify-end {
+
+      /* ── Language dropdown ── */
+      #td-lang-switcher {
+        position: relative;
         flex-shrink: 0;
-        gap: 8px !important;
+        font-family: Inter, system-ui, sans-serif;
       }
-      nav .max-w-7xl {
-        gap: 8px;
+      .td-lang-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 10px;
+        border: 1px solid rgba(255,255,255,0.18);
+        border-radius: 3px;
+        background: rgba(255,255,255,0.04);
+        color: rgba(255,255,255,0.88);
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        cursor: pointer;
+        transition: border-color .2s, background .2s;
+        line-height: 1;
       }
-      nav .hidden.lg\\:flex, nav [class*="lg:flex"] {
-        gap: 6px !important;
+      .td-lang-toggle:hover,
+      .td-lang-toggle[aria-expanded="true"] {
+        border-color: rgba(212,168,83,0.55);
+        background: rgba(212,168,83,0.1);
+        color: #fff;
       }
-      .writing-mode-vertical.rotate-90 {
-        transform-origin: center center;
-        margin-right: 8px;
+      .td-lang-toggle svg { flex-shrink: 0; opacity: 0.75; }
+      .td-lang-toggle .td-lang-chevron {
+        transition: transform .2s;
+        width: 10px; height: 10px;
       }
+      .td-lang-toggle[aria-expanded="true"] .td-lang-chevron {
+        transform: rotate(180deg);
+      }
+      .td-lang-menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        min-width: 130px;
+        background: hsl(218,60%,8%);
+        border: 1px solid rgba(212,168,83,0.35);
+        border-radius: 4px;
+        box-shadow: 0 12px 32px rgba(0,0,0,0.45);
+        overflow: hidden;
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(-4px);
+        transition: opacity .15s, transform .15s, visibility .15s;
+        z-index: 100001;
+      }
+      .td-lang-menu--open {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0);
+      }
+      .td-lang-menu button {
+        display: block;
+        width: 100%;
+        text-align: left;
+        padding: 10px 14px;
+        border: none;
+        background: transparent;
+        color: rgba(255,255,255,0.82);
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        cursor: pointer;
+        transition: background .15s;
+      }
+      .td-lang-menu button:hover { background: rgba(255,255,255,0.07); }
+      .td-lang-menu button.active {
+        color: hsl(35,65%,55%);
+        background: rgba(212,168,83,0.12);
+      }
+      .td-lang-menu button + button {
+        border-top: 1px solid rgba(255,255,255,0.08);
+      }
+
       @media (max-width: 1280px) {
-        .absolute.bottom-8.right-10.hidden.md\\:flex {
-          display: none !important;
-        }
+        .absolute.bottom-8.right-10.hidden.md\\:flex { display: none !important; }
       }
     `;
     document.head.appendChild(style);
   }
 
-  function positionSwitcher() {
-    const wrap = document.getElementById('td-lang-switcher');
-    if (!wrap) return;
-
-    const bookBtn =
-      document.querySelector('a.btn-luxury[href*="#book"]') ||
-      document.querySelector('a.btn-luxury');
-    const menuBtn = document.querySelector('button[aria-label="Toggle menu"]');
-
-    if (bookBtn && bookBtn.offsetParent !== null) {
-      const r = bookBtn.getBoundingClientRect();
-      wrap.style.top = `${Math.round(r.top + (r.height - wrap.offsetHeight) / 2)}px`;
-      wrap.style.left = `${Math.round(r.left - wrap.offsetWidth - 10)}px`;
-      wrap.style.right = 'auto';
-      return;
-    }
-
-    if (menuBtn) {
-      const r = menuBtn.getBoundingClientRect();
-      wrap.style.top = `${Math.round(r.top + (r.height - wrap.offsetHeight) / 2)}px`;
-      wrap.style.left = 'auto';
-      wrap.style.right = `${Math.round(window.innerWidth - r.left + 8)}px`;
-      return;
-    }
-
-    wrap.style.top = '18px';
-    wrap.style.right = '16px';
-    wrap.style.left = 'auto';
-  }
+  const GLOBE_SVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
+  const CHEVRON_SVG = `<svg class="td-lang-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>`;
 
   function renderSwitcher() {
     if (window.location.pathname.startsWith('/admin')) return;
 
     injectStyles();
 
+    const actions = findNavActions();
+    if (!actions) return;
+
     let wrap = document.getElementById('td-lang-switcher');
     if (!wrap) {
       wrap = document.createElement('div');
       wrap.id = 'td-lang-switcher';
-      wrap.setAttribute('role', 'group');
-      wrap.setAttribute('aria-label', 'Language');
-      document.body.appendChild(wrap);
+
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'td-lang-toggle';
+      toggle.setAttribute('aria-expanded', 'false');
+      toggle.setAttribute('aria-haspopup', 'listbox');
+      toggle.innerHTML = `${GLOBE_SVG}<span class="td-lang-current">${LABELS[currentLang]}</span>${CHEVRON_SVG}`;
+      toggle.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        menuOpen = !menuOpen;
+        const menu = wrap.querySelector('.td-lang-menu');
+        if (menu) menu.classList.toggle('td-lang-menu--open', menuOpen);
+        toggle.setAttribute('aria-expanded', String(menuOpen));
+      });
+
+      const menu = document.createElement('div');
+      menu.className = 'td-lang-menu';
+      menu.setAttribute('role', 'listbox');
+
+      wrap.appendChild(toggle);
+      wrap.appendChild(menu);
+
+      document.addEventListener('click', (e) => {
+        if (!wrap.contains(e.target)) closeMenu();
+      });
+
+      const bookBtn = actions.querySelector('a.btn-luxury, a[href*="#book"]');
+      if (bookBtn) actions.insertBefore(wrap, bookBtn);
+      else actions.prepend(wrap);
     }
 
-    wrap.replaceChildren();
-    SUPPORTED.forEach((lang) => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.dataset.lang = lang;
-      btn.textContent = LABELS[lang];
-      btn.className = lang === currentLang ? 'active' : '';
-      btn.setAttribute('aria-pressed', String(lang === currentLang));
-      btn.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-      });
-      btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        setLang(lang);
-      });
-      wrap.appendChild(btn);
-    });
+    const menu = wrap.querySelector('.td-lang-menu');
+    const currentLabel = wrap.querySelector('.td-lang-current');
+    if (currentLabel) currentLabel.textContent = LABELS[currentLang];
 
-    requestAnimationFrame(positionSwitcher);
+    if (menu) {
+      menu.replaceChildren();
+      SUPPORTED.forEach((lang) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.dataset.lang = lang;
+        btn.textContent = FULL_NAMES[lang];
+        btn.className = lang === currentLang ? 'active' : '';
+        btn.setAttribute('role', 'option');
+        btn.setAttribute('aria-selected', String(lang === currentLang));
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          closeMenu();
+          setLang(lang);
+        });
+        menu.appendChild(btn);
+      });
+    }
   }
 
   function scheduleApply() {
@@ -267,7 +371,7 @@
     debounceTimer = setTimeout(() => {
       renderSwitcher();
       applyTranslations();
-    }, 100);
+    }, 120);
   }
 
   async function init() {
@@ -275,8 +379,6 @@
     persistLang(currentLang);
 
     renderSwitcher();
-    window.addEventListener('resize', positionSwitcher);
-    window.addEventListener('scroll', positionSwitcher, { passive: true });
 
     await loadDict(currentLang);
     updateMeta();
@@ -285,17 +387,9 @@
     const observer = new MutationObserver(scheduleApply);
     observer.observe(document.body, { childList: true, subtree: true });
 
-    setInterval(() => {
-      renderSwitcher();
-      positionSwitcher();
-    }, 800);
+    setInterval(renderSwitcher, 2000);
 
-    window.TD_I18N = {
-      getLang: () => currentLang,
-      setLang,
-      t,
-      apply: applyTranslations,
-    };
+    window.TD_I18N = { getLang: () => currentLang, setLang, t, apply: applyTranslations };
   }
 
   if (document.readyState === 'loading') {
