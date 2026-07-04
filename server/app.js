@@ -58,6 +58,16 @@ function localizeTour(tour, lang) {
   return localizeEntity(tour, lang, ['name', 'description', 'location', 'duration', 'highlights', 'difficulty']);
 }
 
+/** Public tours always show "price upon request" — never expose numeric prices. */
+function publicTour(tour, lang) {
+  if (!tour) return tour;
+  return { ...localizeTour(tour, lang), price: 0 };
+}
+
+function normalizeTourPrice(tour) {
+  return { ...tour, price: 0 };
+}
+
 function localizeSettings(settings, lang) {
   if (!lang || lang === 'en') return settings;
   const tr = settings.i18n?.[lang];
@@ -116,14 +126,14 @@ app.get('/api/tours', (req, res) => {
   const country = req.query.country;
   let tours = readDb().tours;
   if (country) tours = tours.filter((t) => tourMatchesCountrySlug(t, String(country).toLowerCase()));
-  sendJson(res, tours.map((t) => localizeTour(t, lang)));
+  sendJson(res, tours.map((t) => publicTour(t, lang)));
 });
 
 app.get('/api/tours/:id', (req, res) => {
   const lang = getRequestLang(req);
   const tour = findById(readDb().tours, req.params.id);
   if (!tour) return sendJson(res, { error: 'Tour not found' }, 404);
-  sendJson(res, localizeTour(tour, lang));
+  sendJson(res, publicTour(tour, lang));
 });
 
 function normalizeCountries(tour) {
@@ -147,12 +157,12 @@ function normalizeCountries(tour) {
 
 app.post('/api/tours', (req, res) => {
   const db = readDb();
-  const tour = {
+  const tour = normalizeTourPrice({
     ...req.body,
     id: nextId(db, 'tour'),
     countries: normalizeCountries(req.body),
     createdAt: new Date().toISOString(),
-  };
+  });
   db.tours.push(tour);
   writeDb(db);
   sendJson(res, tour, 201);
@@ -162,12 +172,12 @@ app.put('/api/tours/:id', (req, res) => {
   const db = readDb();
   const idx = db.tours.findIndex((t) => String(t.id) === String(req.params.id));
   if (idx === -1) return sendJson(res, { error: 'Tour not found' }, 404);
-  db.tours[idx] = {
+  db.tours[idx] = normalizeTourPrice({
     ...db.tours[idx],
     ...req.body,
     id: db.tours[idx].id,
     countries: req.body.countries !== undefined ? normalizeCountries(req.body) : db.tours[idx].countries,
-  };
+  });
   writeDb(db);
   sendJson(res, db.tours[idx]);
 });

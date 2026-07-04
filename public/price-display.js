@@ -13,40 +13,38 @@
     return LABEL[lang()] || LABEL.en;
   }
 
-  function isOnRequestPrice(text) {
+  function isTourPriceText(text) {
     const t = (text || '').trim();
-    return /^\$0(\s*\/\s*person)?$/i.test(t) || t === '$1' || t === '1';
+    return /^\$[\d,]+(\s*\/\s*person)?$/i.test(t);
   }
 
-  function patchEl(el) {
+  function patchPriceEl(el) {
     if (!el || el.dataset.tdPricePatched) return;
     const text = (el.textContent || '').trim();
-    if (!isOnRequestPrice(text)) return;
-
-    const person = el.querySelector('span');
-    if (person && /person/i.test(person.textContent)) {
-      el.textContent = label() + ' ';
-      el.appendChild(person);
-    } else {
-      el.textContent = label();
-    }
+    if (!isTourPriceText(text)) return;
+    el.textContent = label();
     el.dataset.tdPricePatched = '1';
   }
 
   function scan(root) {
     if (!root) return;
+
     root.querySelectorAll('.td-dest-tour-price').forEach((el) => {
-      const n = Number((el.textContent || '').replace(/[^\d]/g, ''));
-      if (!n || n <= 0) {
-        el.textContent = label();
-        el.dataset.tdPricePatched = '1';
-      }
+      el.textContent = label();
+      el.dataset.tdPricePatched = '1';
     });
 
-    root.querySelectorAll('.font-serif, [class*="font-serif"]').forEach(patchEl);
-    root.querySelectorAll('span, div, p').forEach((el) => {
-      if (el.children.length === 0) patchEl(el);
-      else if (el.children.length <= 2 && isOnRequestPrice(el.textContent)) patchEl(el);
+    root.querySelectorAll('.font-serif, [class*="font-serif"], [class*="hsl(35,65%,45%)"]').forEach(patchPriceEl);
+
+    root.querySelectorAll('span, div, p, li').forEach((el) => {
+      if (el.dataset.tdPricePatched) return;
+      const text = (el.textContent || '').trim();
+      if (!isTourPriceText(text)) return;
+      if (el.querySelector('span, div')) {
+        if (isTourPriceText(el.textContent)) patchPriceEl(el);
+        return;
+      }
+      patchPriceEl(el);
     });
   }
 
@@ -54,6 +52,7 @@
   new MutationObserver(() => scan(document.body)).observe(document.body, {
     childList: true,
     subtree: true,
+    characterData: true,
   });
 
   window.addEventListener('td-lang-change', () => {

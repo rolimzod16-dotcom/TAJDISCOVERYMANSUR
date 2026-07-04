@@ -23,6 +23,23 @@
 
   window.__TD_LANG__ = lang;
 
+  function isTourApiPath(pathname) {
+    return /^\/api\/tours(\/\d+)?$/.test(pathname);
+  }
+
+  function stripTourPrices(data) {
+    if (Array.isArray(data)) return data.map(stripTourPrices);
+    if (data && typeof data === 'object') {
+      var out = {};
+      for (var k in data) {
+        if (Object.prototype.hasOwnProperty.call(data, k)) out[k] = data[k];
+      }
+      if (Object.prototype.hasOwnProperty.call(out, 'price')) out.price = 0;
+      return out;
+    }
+    return data;
+  }
+
   var originalFetch = window.fetch.bind(window);
   window.fetch = function (url, options) {
     var href = typeof url === 'string' ? url : url && url.url ? url.url : '';
@@ -35,6 +52,23 @@
         else url = new Request(href, url);
       }
     }
-    return originalFetch(url, options);
+    return originalFetch(url, options).then(function (res) {
+      var pathname;
+      try {
+        pathname = new URL(href, window.location.origin).pathname;
+      } catch (_e) {
+        return res;
+      }
+      if (!isTourApiPath(pathname)) return res;
+      return res.clone().json().then(function (data) {
+        return new Response(JSON.stringify(stripTourPrices(data)), {
+          status: res.status,
+          statusText: res.statusText,
+          headers: res.headers,
+        });
+      }).catch(function () {
+        return res;
+      });
+    });
   };
 })();
