@@ -5,14 +5,19 @@
   const FULL_NAMES = { en: 'English', ru: 'Русский', tg: 'Тоҷикӣ' };
 
   function readLang() {
+    if (window.__TD_LANG__ && SUPPORTED.includes(window.__TD_LANG__)) return window.__TD_LANG__;
     const q = new URLSearchParams(window.location.search).get('lang');
     if (q && SUPPORTED.includes(q)) return q;
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored && SUPPORTED.includes(stored)) return stored;
-    const nav = (navigator.language || '').toLowerCase();
-    if (nav.startsWith('ru')) return 'ru';
-    if (nav.startsWith('tg') || nav.startsWith('tj')) return 'tg';
     return 'en';
+  }
+
+  function langHref(lang) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('lang', lang);
+    url.searchParams.delete('_lc');
+    return url.pathname + url.search + url.hash;
   }
 
   let currentLang = readLang();
@@ -20,31 +25,7 @@
   let loaded = false;
   let applying = false;
   let debounceTimer = null;
-  let menuOpen = false;
-
-  const originalFetch = window.fetch.bind(window);
-  window.fetch = async function (url, options) {
-    let href = typeof url === 'string' ? url : url?.url || '';
-    if (href.startsWith('/') && href.includes('/api/') && !href.includes('/api/storage/')) {
-      const u = new URL(href, location.origin);
-      if (!u.searchParams.has('lang')) {
-        u.searchParams.set('lang', currentLang);
-        href = u.pathname + u.search;
-        if (typeof url === 'string') url = href;
-        else url = new Request(href, url);
-      }
-    }
-    return originalFetch(url, options);
-  };
-
-  function persistLang(lang) {
-    localStorage.setItem(STORAGE_KEY, lang);
-    const url = new URL(location.href);
-    if (lang === 'en') url.searchParams.delete('lang');
-    else url.searchParams.set('lang', lang);
-    url.searchParams.delete('_lc');
-    history.replaceState(null, '', url.pathname + url.search + url.hash);
-  }
+  let switcherReady = false;
 
   async function loadDict(lang) {
     try {
@@ -83,8 +64,9 @@
       const lead = raw.match(/^\s*/)[0];
       const trail = raw.match(/\s*$/)[0];
       const core = raw.trim();
-      const translated = t(core);
-      if (translated !== core) node.textContent = lead + translated + trail;
+      if (!node.__tdOriginal) node.__tdOriginal = core;
+      const translated = currentLang === 'en' ? node.__tdOriginal : t(node.__tdOriginal);
+      if (translated !== raw.trim()) node.textContent = lead + translated + trail;
       return;
     }
     if (node.nodeType !== Node.ELEMENT_NODE || shouldSkip(node)) return;
@@ -92,8 +74,10 @@
     ['placeholder', 'title', 'aria-label'].forEach((attr) => {
       const val = node.getAttribute(attr);
       if (!val) return;
-      const tr = t(val.trim());
-      if (tr !== val.trim()) node.setAttribute(attr, tr);
+      const key = '__tdOrig_' + attr;
+      if (!node[key]) node[key] = val;
+      const tr = currentLang === 'en' ? node[key] : t(node[key].trim());
+      if (tr !== val) node.setAttribute(attr, tr);
     });
 
     for (const child of [...node.childNodes]) translateNode(child);
@@ -110,42 +94,30 @@
   }
 
   function applyTranslations() {
-    if (!loaded || applying || currentLang === 'en') return;
+    if (!loaded || applying) return;
     applying = true;
     try {
-      translateNode(document.body);
+      if (currentLang !== 'en') translateNode(document.body);
       updateMeta();
     } finally {
       applying = false;
     }
   }
 
-  function setLang(lang) {
-    if (!SUPPORTED.includes(lang) || lang === currentLang) return;
+  function goLang(lang) {
+    if (!SUPPORTED.includes(lang)) return;
     localStorage.setItem(STORAGE_KEY, lang);
-    const url = new URL(location.href);
-    if (lang === 'en') url.searchParams.delete('lang');
-    else url.searchParams.set('lang', lang);
-    url.searchParams.set('_lc', String(Date.now()));
-    window.location.replace(url.toString());
+    window.__TD_LANG__ = lang;
+    try {
+      sessionStorage.clear();
+    } catch (_) {}
+    window.location.href = langHref(lang);
   }
 
   function findNavActions() {
     const nav = document.querySelector('nav');
     if (!nav) return null;
-    return (
-      nav.querySelector('.flex.items-center.justify-end.gap-3') ||
-      nav.querySelector('.flex.items-center.justify-end') ||
-      nav.querySelector('[class*="justify-end"]')
-    );
-  }
-
-  function closeMenu() {
-    menuOpen = false;
-    const menu = document.querySelector('.td-lang-menu');
-    const toggle = document.querySelector('.td-lang-toggle');
-    if (menu) menu.classList.remove('td-lang-menu--open');
-    if (toggle) toggle.setAttribute('aria-expanded', 'false');
+    return nav.querySelector('.flex.items-center.justify-end.gap-3') || nav.querySelector('.flex.items-center.justify-end');
   }
 
   function injectStyles() {
@@ -153,140 +125,59 @@
     const style = document.createElement('style');
     style.id = 'td-i18n-styles';
     style.textContent = `
-      /* ── Navbar layout fix ── */
+      nav, nav .max-w-7xl, nav .flex.items-center.justify-end { overflow: visible !important; }
       nav .max-w-7xl[class*="grid"] {
         grid-template-columns: minmax(0, auto) minmax(0, 1fr) minmax(0, auto) !important;
         gap: 12px !important;
-        padding-left: 16px !important;
-        padding-right: 16px !important;
       }
       nav .hidden.md\\:flex.items-center[class*="gap"] {
-        justify-content: center;
-        flex-wrap: nowrap;
-        gap: 14px !important;
-        min-width: 0;
-        overflow: hidden;
+        justify-content: center; gap: 14px !important; min-width: 0;
       }
       nav .hidden.md\\:flex.items-center a,
       nav .hidden.md\\:flex.items-center button[type="button"] {
-        white-space: nowrap !important;
-        flex-shrink: 0;
-        font-size: 0.56rem !important;
-        letter-spacing: 0.14em !important;
+        white-space: nowrap !important; flex-shrink: 0;
+        font-size: 0.56rem !important; letter-spacing: 0.14em !important;
       }
       html[lang="ru"] nav .hidden.md\\:flex.items-center a,
       html[lang="ru"] nav .hidden.md\\:flex.items-center button[type="button"],
       html[lang="tg"] nav .hidden.md\\:flex.items-center a,
       html[lang="tg"] nav .hidden.md\\:flex.items-center button[type="button"] {
-        font-size: 0.52rem !important;
-        letter-spacing: 0.11em !important;
-      }
-      @media (min-width: 1100px) {
-        nav .hidden.md\\:flex.items-center[class*="gap"] { gap: 18px !important; }
-        nav .hidden.md\\:flex.items-center a,
-        nav .hidden.md\\:flex.items-center button[type="button"] {
-          font-size: 0.58rem !important;
-        }
+        font-size: 0.52rem !important; letter-spacing: 0.11em !important;
       }
       @media (min-width: 1280px) {
-        nav .hidden.md\\:flex.items-center[class*="gap"] { gap: 24px !important; }
-        nav .hidden.md\\:flex.items-center a,
-        nav .hidden.md\\:flex.items-center button[type="button"] {
-          font-size: 0.6rem !important;
-        }
+        nav .hidden.md\\:flex.items-center[class*="gap"] { gap: 22px !important; }
       }
-      nav .flex.items-center.justify-end {
-        flex-shrink: 0;
-        gap: 10px !important;
-        margin-left: auto;
-      }
-      a.btn-luxury {
-        white-space: nowrap !important;
-        flex-shrink: 0 !important;
-        padding-left: 16px !important;
-        padding-right: 16px !important;
-        font-size: 0.56rem !important;
-      }
+      nav .flex.items-center.justify-end { flex-shrink: 0; gap: 10px !important; }
+      a.btn-luxury { white-space: nowrap !important; flex-shrink: 0 !important; }
 
-      /* ── Language dropdown ── */
-      #td-lang-switcher {
-        position: relative;
-        flex-shrink: 0;
-        font-family: Inter, system-ui, sans-serif;
-      }
+      #td-lang-switcher { position: relative; flex-shrink: 0; z-index: 100002; }
       .td-lang-toggle {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 7px 10px;
-        border: 1px solid rgba(255,255,255,0.18);
-        border-radius: 3px;
-        background: rgba(255,255,255,0.04);
-        color: rgba(255,255,255,0.88);
-        font-size: 10px;
-        font-weight: 600;
-        letter-spacing: 0.1em;
-        cursor: pointer;
-        transition: border-color .2s, background .2s;
-        line-height: 1;
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 7px 11px; border: 1px solid rgba(255,255,255,0.2); border-radius: 3px;
+        background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.9);
+        font-size: 10px; font-weight: 600; letter-spacing: 0.1em;
+        cursor: pointer; text-decoration: none; line-height: 1;
       }
-      .td-lang-toggle:hover,
-      .td-lang-toggle[aria-expanded="true"] {
-        border-color: rgba(212,168,83,0.55);
-        background: rgba(212,168,83,0.1);
-        color: #fff;
+      .td-lang-toggle:hover, #td-lang-switcher.td-lang-open .td-lang-toggle {
+        border-color: rgba(212,168,83,0.6); background: rgba(212,168,83,0.12); color: #fff;
       }
-      .td-lang-toggle svg { flex-shrink: 0; opacity: 0.75; }
-      .td-lang-toggle .td-lang-chevron {
-        transition: transform .2s;
-        width: 10px; height: 10px;
-      }
-      .td-lang-toggle[aria-expanded="true"] .td-lang-chevron {
-        transform: rotate(180deg);
-      }
+      .td-lang-chevron { width: 10px; height: 10px; transition: transform .2s; opacity: 0.7; }
+      #td-lang-switcher.td-lang-open .td-lang-chevron { transform: rotate(180deg); }
       .td-lang-menu {
-        position: absolute;
-        top: calc(100% + 6px);
-        right: 0;
-        min-width: 130px;
-        background: hsl(218,60%,8%);
-        border: 1px solid rgba(212,168,83,0.35);
-        border-radius: 4px;
-        box-shadow: 0 12px 32px rgba(0,0,0,0.45);
-        overflow: hidden;
-        opacity: 0;
-        visibility: hidden;
-        transform: translateY(-4px);
-        transition: opacity .15s, transform .15s, visibility .15s;
-        z-index: 100001;
+        position: absolute; top: calc(100% + 6px); right: 0; min-width: 140px;
+        background: hsl(218,60%,8%); border: 1px solid rgba(212,168,83,0.4); border-radius: 4px;
+        box-shadow: 0 12px 40px rgba(0,0,0,0.5); z-index: 100003;
+        display: none;
       }
-      .td-lang-menu--open {
-        opacity: 1;
-        visibility: visible;
-        transform: translateY(0);
+      #td-lang-switcher.td-lang-open .td-lang-menu { display: block; }
+      .td-lang-menu a {
+        display: block; padding: 11px 16px; color: rgba(255,255,255,0.85);
+        font-size: 12px; text-decoration: none; letter-spacing: 0.02em;
+        border-bottom: 1px solid rgba(255,255,255,0.07);
       }
-      .td-lang-menu button {
-        display: block;
-        width: 100%;
-        text-align: left;
-        padding: 10px 14px;
-        border: none;
-        background: transparent;
-        color: rgba(255,255,255,0.82);
-        font-size: 11px;
-        letter-spacing: 0.04em;
-        cursor: pointer;
-        transition: background .15s;
-      }
-      .td-lang-menu button:hover { background: rgba(255,255,255,0.07); }
-      .td-lang-menu button.active {
-        color: hsl(35,65%,55%);
-        background: rgba(212,168,83,0.12);
-      }
-      .td-lang-menu button + button {
-        border-top: 1px solid rgba(255,255,255,0.08);
-      }
-
+      .td-lang-menu a:last-child { border-bottom: none; }
+      .td-lang-menu a:hover { background: rgba(255,255,255,0.08); color: #fff; }
+      .td-lang-menu a.active { color: hsl(35,65%,55%); background: rgba(212,168,83,0.1); }
       @media (max-width: 1280px) {
         .absolute.bottom-8.right-10.hidden.md\\:flex { display: none !important; }
       }
@@ -299,11 +190,10 @@
 
   function renderSwitcher() {
     if (window.location.pathname.startsWith('/admin')) return;
-
-    injectStyles();
-
     const actions = findNavActions();
     if (!actions) return;
+
+    injectStyles();
 
     let wrap = document.getElementById('td-lang-switcher');
     if (!wrap) {
@@ -313,55 +203,48 @@
       const toggle = document.createElement('button');
       toggle.type = 'button';
       toggle.className = 'td-lang-toggle';
-      toggle.setAttribute('aria-expanded', 'false');
-      toggle.setAttribute('aria-haspopup', 'listbox');
       toggle.innerHTML = `${GLOBE_SVG}<span class="td-lang-current">${LABELS[currentLang]}</span>${CHEVRON_SVG}`;
       toggle.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        menuOpen = !menuOpen;
-        const menu = wrap.querySelector('.td-lang-menu');
-        if (menu) menu.classList.toggle('td-lang-menu--open', menuOpen);
-        toggle.setAttribute('aria-expanded', String(menuOpen));
+        wrap.classList.toggle('td-lang-open');
       });
 
       const menu = document.createElement('div');
       menu.className = 'td-lang-menu';
-      menu.setAttribute('role', 'listbox');
+      SUPPORTED.forEach((lang) => {
+        const link = document.createElement('a');
+        link.href = langHref(lang);
+        link.textContent = FULL_NAMES[lang];
+        link.className = lang === currentLang ? 'active' : '';
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          goLang(lang);
+        });
+        menu.appendChild(link);
+      });
 
       wrap.appendChild(toggle);
       wrap.appendChild(menu);
 
       document.addEventListener('click', (e) => {
-        if (!wrap.contains(e.target)) closeMenu();
+        if (!wrap.contains(e.target)) wrap.classList.remove('td-lang-open');
       });
 
       const bookBtn = actions.querySelector('a.btn-luxury, a[href*="#book"]');
       if (bookBtn) actions.insertBefore(wrap, bookBtn);
       else actions.prepend(wrap);
-    }
 
-    const menu = wrap.querySelector('.td-lang-menu');
-    const currentLabel = wrap.querySelector('.td-lang-current');
-    if (currentLabel) currentLabel.textContent = LABELS[currentLang];
-
-    if (menu) {
-      menu.replaceChildren();
-      SUPPORTED.forEach((lang) => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.dataset.lang = lang;
-        btn.textContent = FULL_NAMES[lang];
-        btn.className = lang === currentLang ? 'active' : '';
-        btn.setAttribute('role', 'option');
-        btn.setAttribute('aria-selected', String(lang === currentLang));
-        btn.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          closeMenu();
-          setLang(lang);
-        });
-        menu.appendChild(btn);
+      switcherReady = true;
+    } else {
+      const label = wrap.querySelector('.td-lang-current');
+      if (label) label.textContent = LABELS[currentLang];
+      wrap.querySelectorAll('.td-lang-menu a').forEach((a, i) => {
+        const lang = SUPPORTED[i];
+        if (lang) {
+          a.href = langHref(lang);
+          a.className = lang === currentLang ? 'active' : '';
+        }
       });
     }
   }
@@ -369,15 +252,13 @@
   function scheduleApply() {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
-      renderSwitcher();
+      if (!switcherReady) renderSwitcher();
       applyTranslations();
-    }, 120);
+    }, 150);
   }
 
   async function init() {
     currentLang = readLang();
-    persistLang(currentLang);
-
     renderSwitcher();
 
     await loadDict(currentLang);
@@ -387,9 +268,7 @@
     const observer = new MutationObserver(scheduleApply);
     observer.observe(document.body, { childList: true, subtree: true });
 
-    setInterval(renderSwitcher, 2000);
-
-    window.TD_I18N = { getLang: () => currentLang, setLang, t, apply: applyTranslations };
+    window.TD_I18N = { getLang: () => currentLang, setLang: goLang, t, apply: applyTranslations };
   }
 
   if (document.readyState === 'loading') {

@@ -270,13 +270,7 @@
     init();
   }
 
-  window.addEventListener('td-lang-change', () => {
-    cachedTours = null;
-    document.querySelectorAll('.td-country-filter').forEach((el) => el.remove());
-    document.querySelectorAll('.td-dest-tours').forEach((el) => el.remove());
-    init();
-    if (window.TD_I18N?.apply) window.TD_I18N.apply();
-  });
+
 
   window.addEventListener('popstate', () => {
     const slug = getCountryFromUrl();
