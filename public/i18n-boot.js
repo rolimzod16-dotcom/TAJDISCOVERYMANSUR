@@ -23,6 +23,23 @@
 
   window.__TD_LANG__ = lang;
 
+  var PRICE_LABELS = {
+    en: 'Price upon request',
+    ru: 'Цена по запросу',
+    tg: 'Нарх бо дархост',
+  };
+
+  window.__tdPriceUponRequestLabel = function () {
+    var current = localStorage.getItem(STORAGE_KEY) || lang;
+    return PRICE_LABELS[current] || PRICE_LABELS.en;
+  };
+
+  window.__tdTourPriceDisplay = function (price) {
+    var amount = Number(price);
+    if (!amount || amount <= 0) return window.__tdPriceUponRequestLabel();
+    return '$' + amount.toLocaleString();
+  };
+
   function isTourApiPath(pathname) {
     return /^\/api\/tours(\/\d+)?$/.test(pathname);
   }

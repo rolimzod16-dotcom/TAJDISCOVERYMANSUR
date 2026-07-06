@@ -5,46 +5,41 @@
     tg: 'Нарх бо дархост',
   };
 
-  function lang() {
-    return localStorage.getItem('td-lang') || 'en';
-  }
-
   function label() {
-    return LABEL[lang()] || LABEL.en;
+    if (typeof window.__tdPriceUponRequestLabel === 'function') {
+      return window.__tdPriceUponRequestLabel();
+    }
+    const lang = localStorage.getItem('td-lang') || 'en';
+    return LABEL[lang] || LABEL.en;
   }
 
-  function isTourPriceText(text) {
+  function isZeroPriceText(text) {
     const t = (text || '').trim();
-    return /^\$[\d,]+(\s*\/\s*person)?$/i.test(t);
+    return (
+      t === '0' ||
+      t === '$0' ||
+      t === '$1' ||
+      /^\$0(\s*\/?\s*person)?$/i.test(t) ||
+      /^\$[\d,]+(\s*\/?\s*person)?$/i.test(t)
+    );
   }
 
-  function patchPriceEl(el) {
+  function patchEl(el) {
     if (!el || el.dataset.tdPricePatched) return;
     const text = (el.textContent || '').trim();
-    if (!isTourPriceText(text)) return;
+    if (!isZeroPriceText(text)) return;
     el.textContent = label();
     el.dataset.tdPricePatched = '1';
   }
 
   function scan(root) {
     if (!root) return;
-
     root.querySelectorAll('.td-dest-tour-price').forEach((el) => {
       el.textContent = label();
       el.dataset.tdPricePatched = '1';
     });
-
-    root.querySelectorAll('.font-serif, [class*="font-serif"], [class*="hsl(35,65%,45%)"]').forEach(patchPriceEl);
-
     root.querySelectorAll('span, div, p, li').forEach((el) => {
-      if (el.dataset.tdPricePatched) return;
-      const text = (el.textContent || '').trim();
-      if (!isTourPriceText(text)) return;
-      if (el.querySelector('span, div')) {
-        if (isTourPriceText(el.textContent)) patchPriceEl(el);
-        return;
-      }
-      patchPriceEl(el);
+      if (el.children.length <= 2) patchEl(el);
     });
   }
 
