@@ -24,6 +24,11 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
+const memoryUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
+
 function sendJson(res, data, status = 200) {
   res.status(status).json(data);
 }
@@ -103,41 +108,29 @@ function safeUploadFilename(filename) {
   return path.basename(String(filename || '')).replace(/[^a-zA-Z0-9._-]/g, '');
 }
 
-// PUT upload must be registered before express.json()
-app.put(
-  '/api/storage/uploads/:filename',
-  express.raw({ type: ['image/jpeg', 'image/png', 'image/webp', 'application/octet-stream'], limit: '10mb' }),
-  async (req, res) => {
-    const filename = safeUploadFilename(req.params.filename);
-    if (!filename) return sendJson(res, { error: 'Invalid filename' }, 400);
-    if (!req.body?.length) return sendJson(res, { error: 'No file uploaded' }, 400);
-    try {
-      await saveUpload(filename, req.body, req.headers['content-type']);
-      res.status(200).end();
-    } catch (err) {
-      console.error('Upload failed:', err);
-      sendJson(res, { error: 'Upload failed' }, 500);
-    }
-  }
-);
+async function handleNamedUpload(req, res) {
+  const filename = safeUploadFilename(req.params.filename);
+  if (!filename) return sendJson(res, { error: 'Invalid filename' }, 400);
 
-app.use(express.json({ limit: '25mb' }));
+  const buffer = req.file?.buffer || req.body;
+  if (!buffer?.length) return sendJson(res, { error: 'No file uploaded' }, 400);
 
-app.get('/api/storage/objects/uploads/:id', async (req, res) => {
-  const id = safeUploadFilename(req.params.id);
-  if (!id) return res.status(404).send('Not found');
   try {
-    const file = await getUpload(id);
-    if (!file) return res.status(404).send('Not found');
-    if (file.type === 'blob') return res.redirect(file.url);
-    return res.sendFile(file.filePath);
+    const contentType =
+      req.file?.mimetype || req.headers['content-type'] || 'application/octet-stream';
+    await saveUpload(filename, buffer, contentType);
+    res.status(200).end();
   } catch (err) {
-    console.error('Serve upload failed:', err);
-    res.status(404).send('Not found');
+    console.error('Upload failed:', err);
+    const message =
+      process.env.VERCEL && !process.env.DATABASE_URL && !process.env.BLOB_READ_WRITE_TOKEN
+        ? 'Storage not configured. Add DATABASE_URL in Vercel environment variables.'
+        : 'Upload failed';
+    sendJson(res, { error: message }, 500);
   }
-});
+}
 
-app.post('/api/storage/uploads/request-url', (req, res) => {
+app.post('/api/storage/uploads/request-url', express.json(), (req, res) => {
   const { name, size, contentType } = req.body || {};
   if (!name) return sendJson(res, { error: 'name is required' }, 400);
   if (size && size > 10 * 1024 * 1024) return sendJson(res, { error: 'File too large (max 10 MB)' }, 400);
@@ -148,6 +141,35 @@ app.post('/api/storage/uploads/request-url', (req, res) => {
   const uploadURL = `/api/storage/uploads/${filename}`;
 
   sendJson(res, { uploadURL, objectPath });
+});
+
+// PUT for local dev; POST used on Vercel (via admin-upload-patch.js)
+app.put(
+  '/api/storage/uploads/:filename',
+  express.raw({ type: ['image/jpeg', 'image/png', 'image/webp', 'application/octet-stream'], limit: '10mb' }),
+  handleNamedUpload
+);
+app.post('/api/storage/uploads/:filename', memoryUpload.single('file'), handleNamedUpload);
+
+app.use(express.json({ limit: '25mb' }));
+
+app.get('/api/storage/objects/uploads/:id', async (req, res) => {
+  const id = safeUploadFilename(req.params.id);
+  if (!id) return res.status(404).send('Not found');
+  try {
+    const file = await getUpload(id);
+    if (!file) return res.status(404).send('Not found');
+    if (file.type === 'blob') return res.redirect(file.url);
+    if (file.type === 'pg') {
+      res.setHeader('Content-Type', file.contentType || 'application/octet-stream');
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      return res.send(file.buffer);
+    }
+    return res.sendFile(file.filePath);
+  } catch (err) {
+    console.error('Serve upload failed:', err);
+    res.status(404).send('Not found');
+  }
 });
 
 app.post('/api/storage', upload.single('file'), (req, res) => {
