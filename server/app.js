@@ -158,7 +158,10 @@ app.get('/api/storage/objects/uploads/:id', async (req, res) => {
   if (!id) return res.status(404).send('Not found');
   try {
     const file = await getUpload(id);
-    if (!file) return res.status(404).send('Not found');
+    if (!file) {
+      // Legacy images shipped in public/uploads (static on Vercel)
+      return res.redirect(`/uploads/${id}`);
+    }
     if (file.type === 'blob') return res.redirect(file.url);
     if (file.type === 'pg') {
       res.setHeader('Content-Type', file.contentType || 'application/octet-stream');
